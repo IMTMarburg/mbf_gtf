@@ -1,0 +1,8 @@
+Build Wheels using maturin.
+
+ * docker run -it --rm -v $(pwd):/io --entrypoint "/bin/bash" konstin2/maturin:master
+ * rustup toolchain install nightly
+ * rustup default nightly-x86_64-unknown-linux-gnu
+ * export PATH=$PATH:/opt/python/cp38-cp38/bin
+ * maturin build
+
