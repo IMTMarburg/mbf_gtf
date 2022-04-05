@@ -1,4 +1,3 @@
-#![feature(nll)]
 extern crate pyo3;
 extern crate hashbrown;
 extern crate flate2;
@@ -12,7 +11,7 @@ use std::iter::FromIterator;
 use pyo3::prelude::*;
 use pyo3::wrap_pyfunction;
 use pyo3::{PyErr, PyResult};
-use pyo3::exceptions::ValueError;
+use pyo3::exceptions::PyValueError;
 use pyo3::types::{PyDict, PyTuple};
 
 use hashbrown::{HashMap, HashSet}; //hashbrown offers a very modest speedup of about 0.7 seconds (from 10.28 to 9.5) 
@@ -51,22 +50,22 @@ impl GTFEntrys {
     }
 }
 
-impl IntoPyObject for GTFEntrys {
-    fn into_object(mut self, py: Python) -> PyObject {
+impl IntoPy<PyObject> for GTFEntrys {
+    fn into_py(mut self, py: Python<'_>) -> PyObject {
         let mut hm = RustHashMap::new();
-        hm.insert("seqname", self.seqname.into_object(py));
+        hm.insert("seqname", self.seqname.into_py(py));
         hm.insert("start", numpy_from_vec_u64(self.start).unwrap());
-                  //self.start.into_object(py));
+                  //self.start.into_py(py));
         hm.insert("end", 
                   numpy_from_vec_u64(self.end).unwrap());
-                  //self.end.into_object(py));
-        hm.insert("strand", //self.strand.into_object(py));
+                  //self.end.into_py(py));
+        hm.insert("strand", //self.strand.into_py(py));
                   numpy_from_vec_i8(self.strand).unwrap());
         let cat_attributes: RustHashMap<String, Categorical> = self.cat_attributes.drain().collect();
         let vec_attributes: RustHashMap<String, Vec<String>> = self.vec_attributes.drain().collect();
-        hm.insert("cat_attributes", cat_attributes.into_object(py));
-        hm.insert("vec_attributes", vec_attributes.into_object(py));
-        hm.into_object(py)
+        hm.insert("cat_attributes", cat_attributes.into_py(py));
+        hm.insert("vec_attributes", vec_attributes.into_py(py));
+        hm.into_py(py)
     }
 }
 
@@ -83,11 +82,11 @@ fn vector_new_empty_push(count: u32, value: String) -> Vec<String> {
 fn inner_parse_ensembl_gtf(
     filename: &str,
     accepted_features: HashSet<String>,
-) -> Result<RustHashMap<String, GTFEntrys>, Box<error::Error>> {
+) -> Result<RustHashMap<String, GTFEntrys>, Box<dyn error::Error>> {
     // this is good but it still iterates through parts of the input
     // three times!
     let f = File::open(filename)?;
-    let f: Box<Read> = if filename.ends_with(".gz") {
+    let f: Box<dyn Read> = if filename.ends_with(".gz") {
         Box::new(GzDecoder::new(f))
     } else {Box::new(f)};
 
@@ -229,7 +228,7 @@ fn parse_ensembl_gtf(
     let parse_result = inner_parse_ensembl_gtf(filename, hm_accepted_features);
     let parse_result = match parse_result {
         Ok(r) => r,
-        Err(e) => return Err(PyErr::new::<ValueError, _>(e.to_string())),
+        Err(e) => return Err(PyErr::new::<PyValueError, _>(e.to_string())),
     };
     let gil = Python::acquire_gil();
     let py = gil.python();
@@ -257,7 +256,7 @@ def all_to_pandas(dict_of_frames):
     return result
     ", None, Some(locals))?;
     let all_to_pandas = locals.get_item("all_to_pandas").unwrap();
-    let args = PyTuple::new(py, &[parse_result.into_object(py)]);
+    let args = PyTuple::new(py, &[parse_result.into_py(py)]);
     let result = all_to_pandas.call1(args);
     match result {
         Ok(r) => Ok(r.to_object(py)),
