@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use pyo3::prelude::*;
 use pyo3::IntoPy;
-use numpy::numpy_from_vec_u32;
+use crate::numpy::numpy_from_vec_u32;
 
 #[derive(Debug)]
 pub struct Categorical {

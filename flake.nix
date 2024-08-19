@@ -15,7 +15,7 @@
       in with pkgs; {
         devShell = mkShell {
           buildInputs = [
-            rust-bin.stable."1.59.0".default
+            rust-bin.stable."1.80.0".default
             #(pkgs.python39.withPackages (pp: [ pp.maturin ]))
             pkgs.maturin
             bacon

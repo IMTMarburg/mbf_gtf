@@ -1,30 +1,21 @@
-extern crate pyo3;
-extern crate hashbrown;
-extern crate flate2;
-
 use std::collections::HashMap as RustHashMap;
-use std::fs::File;
-use std::io::{BufRead, Read, BufReader};
 use std::error;
+use std::fs::File;
+use std::io::{BufRead, BufReader, Read};
 use std::iter::FromIterator;
 
-use pyo3::prelude::*;
-use pyo3::wrap_pyfunction;
-use pyo3::{PyErr, PyResult};
 use pyo3::exceptions::PyValueError;
+use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyTuple};
+use pyo3::wrap_pyfunction;
 
-use hashbrown::{HashMap, HashSet}; //hashbrown offers a very modest speedup of about 0.7 seconds (from 10.28 to 9.5) 
 use flate2::read::GzDecoder;
+use hashbrown::{HashMap, HashSet}; //hashbrown offers a very modest speedup of about 0.7 seconds (from 10.28 to 9.5)
 
 mod categorical;
 mod numpy;
 use categorical::Categorical;
-use numpy::{
-    numpy_from_vec_u64,
-    numpy_from_vec_i8
-};
-
+use numpy::{numpy_from_vec_i8, numpy_from_vec_u64};
 
 struct GTFEntrys {
     seqname: Categorical,
@@ -55,14 +46,17 @@ impl IntoPy<PyObject> for GTFEntrys {
         let mut hm = RustHashMap::new();
         hm.insert("seqname", self.seqname.into_py(py));
         hm.insert("start", numpy_from_vec_u64(self.start).unwrap());
-                  //self.start.into_py(py));
-        hm.insert("end", 
-                  numpy_from_vec_u64(self.end).unwrap());
-                  //self.end.into_py(py));
-        hm.insert("strand", //self.strand.into_py(py));
-                  numpy_from_vec_i8(self.strand).unwrap());
-        let cat_attributes: RustHashMap<String, Categorical> = self.cat_attributes.drain().collect();
-        let vec_attributes: RustHashMap<String, Vec<String>> = self.vec_attributes.drain().collect();
+        //self.start.into_py(py));
+        hm.insert("end", numpy_from_vec_u64(self.end).unwrap());
+        //self.end.into_py(py));
+        hm.insert(
+            "strand", //self.strand.into_py(py));
+            numpy_from_vec_i8(self.strand).unwrap(),
+        );
+        let cat_attributes: RustHashMap<String, Categorical> =
+            self.cat_attributes.drain().collect();
+        let vec_attributes: RustHashMap<String, Vec<String>> =
+            self.vec_attributes.drain().collect();
         hm.insert("cat_attributes", cat_attributes.into_py(py));
         hm.insert("vec_attributes", vec_attributes.into_py(py));
         hm.into_py(py)
@@ -88,7 +82,9 @@ fn inner_parse_ensembl_gtf(
     let f = File::open(filename)?;
     let f: Box<dyn Read> = if filename.ends_with(".gz") {
         Box::new(GzDecoder::new(f))
-    } else {Box::new(f)};
+    } else {
+        Box::new(f)
+    };
 
     let f = BufReader::new(f);
     let mut out: HashMap<String, GTFEntrys> = HashMap::new();
@@ -109,7 +105,7 @@ fn inner_parse_ensembl_gtf(
             out.insert(feature.to_string(), hm);
         }
         let start: u64 = parts.next().ok_or("Failed to find start")?.parse()?;
-        let start = start -1;
+        let start = start - 1;
         let end: u64 = parts.next().ok_or("Failed to find start")?.parse()?;
         parts.next(); //consume score
         let strand = parts.next().ok_or("Failed to find start")?;
@@ -120,7 +116,7 @@ fn inner_parse_ensembl_gtf(
         } else {
             0
         };
-        let mut target = out.get_mut(feature).unwrap();
+        let target = out.get_mut(feature).unwrap();
         target.seqname.push(seqname);
         target.start.push(start);
         target.end.push(end);
@@ -136,7 +132,8 @@ fn inner_parse_ensembl_gtf(
             let mut kv = attr_value.splitn(2, ' ');
             let mut key: &str = kv.next().unwrap();
             if key == "tag" {
-                if feature != "transcript"{ // only transcripts have tags!
+                if feature != "transcript" {
+                    // only transcripts have tags!
                     continue;
                 }
                 if tag_count == 0 {
@@ -164,7 +161,8 @@ fn inner_parse_ensembl_gtf(
                 continue;
             }
             let value: &str = kv.next().unwrap().trim_matches('"');
-            if key.ends_with("_id") { // vec vs categorical seems to be almost performance neutral
+            if key.ends_with("_id") {
+                // vec vs categorical seems to be almost performance neutral
                 //just htis push here (and I guess the fill-er-up below
                 //takes about 3 seconds.
                 target
@@ -179,7 +177,8 @@ fn inner_parse_ensembl_gtf(
                             vector_new_empty_push(target.count, value.to_string()),
                         );
                     });
-            } else { // these tributes take about 1.5s to store (nd fill-er-up)
+            } else {
+                // these tributes take about 1.5s to store (nd fill-er-up)
                 target
                     .cat_attributes
                     .get_mut(key)
@@ -217,12 +216,9 @@ fn inner_parse_ensembl_gtf(
 ///
 /// # arguments
 /// `filename - A filename (uncompressed gtf)
-/// `accepted_features` - a list of features to fetch, or an empty list for all 
+/// `accepted_features` - a list of features to fetch, or an empty list for all
 #[pyfunction]
-fn parse_ensembl_gtf(
-    filename: &str,
-    accepted_features: Vec<String>,
-) -> PyResult<PyObject> {
+fn parse_ensembl_gtf(filename: &str, accepted_features: Vec<String>) -> PyResult<PyObject> {
     let hm_accepted_features: HashSet<String> =
         HashSet::from_iter(accepted_features.iter().cloned());
     let parse_result = inner_parse_ensembl_gtf(filename, hm_accepted_features);
@@ -230,10 +226,10 @@ fn parse_ensembl_gtf(
         Ok(r) => r,
         Err(e) => return Err(PyErr::new::<PyValueError, _>(e.to_string())),
     };
-    let gil = Python::acquire_gil();
-    let py = gil.python();
-    let locals = PyDict::new(py);
-    py.run("
+    Python::with_gil(|py| {
+        let locals = PyDict::new_bound(py);
+        py.run_bound(
+            "
     
 def all_to_pandas(dict_of_frames):
     import pandas as pd
@@ -254,21 +250,23 @@ def all_to_pandas(dict_of_frames):
             d[c] = frame['vec_attributes'][c]
         result[k] = pd.DataFrame(d)
     return result
-    ", None, Some(locals))?;
-    let all_to_pandas = locals.get_item("all_to_pandas").unwrap();
-    let args = PyTuple::new(py, &[parse_result.into_py(py)]);
-    let result = all_to_pandas.call1(args);
-    match result {
-        Ok(r) => Ok(r.to_object(py)),
-        Err(e) => Err(e)
-    }
+    ",
+            None,
+            Some(&locals),
+        )?;
+        let all_to_pandas = locals.get_item("all_to_pandas").unwrap().unwrap();
+        let args = PyTuple::new_bound(py, &[parse_result.into_py(py)]);
+        let result = all_to_pandas.call1(args);
+        match result {
+            Ok(r) => Ok(r.to_object(py)),
+            Err(e) => Err(e),
+        }
+    })
 }
-
-
 
 /// This module is a python module implemented in Rust.
 #[pymodule]
-fn mbf_gtf(_py: Python, m: &PyModule) -> PyResult<()> {
+fn mbf_gtf(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_wrapped(wrap_pyfunction!(parse_ensembl_gtf))?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
 
