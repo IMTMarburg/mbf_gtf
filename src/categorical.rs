@@ -3,9 +3,10 @@ use std::collections::HashMap;
 
 use pyo3::prelude::*;
 use pyo3::IntoPy;
-use crate::numpy::numpy_from_vec_u32;
+use pyo3::types::PyTuple;
+use numpy::ToPyArray;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Categorical {
     pub values: Vec<u32>,
     pub cats: HashMap<String, u32>,
@@ -59,8 +60,12 @@ impl Categorical {
         self.values.len()
     }
 }
-impl IntoPy<PyObject> for Categorical {
-    fn into_py(self, py: Python<'_>) -> PyObject {
+impl<'py> IntoPyObject<'py> for Categorical {
+    type Target = PyTuple; // the Python type
+    type Output = Bound<'py, Self::Target>; // in most cases this will be `Bound`
+    type Error = PyErr;
+
+    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
         // turn the cats into a vector instead of a dict
         // also means the must be continuous
         // but that's what pandas.Categorical wants
@@ -68,6 +73,6 @@ impl IntoPy<PyObject> for Categorical {
         sorted.sort_by(|a, b| a.1.cmp(b.1));
         let cats: Vec<String> = sorted.iter().map(|a| a.0.clone()).collect();
         //(self.values.into_object(py), cats.into_object(py)).into_object(py)
-        (numpy_from_vec_u32(self.values).unwrap(), cats.into_py(py)).into_py(py)
+        (self.values.to_pyarray(py), cats.into_pyobject(py)?).into_pyobject(py)
     }
 }
