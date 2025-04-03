@@ -2,6 +2,7 @@
 import sys
 import shutil
 import os
+import subprocess
 try:
     import numpy
     import pandas
@@ -11,6 +12,8 @@ except:
 
 
 print("copying debug build of mbf_gtf.so to target/debug")
+
+subprocess.check_call(['cargo','build'])
 
 shutil.copy("target/debug/libmbf_gtf.so", "target/debug/mbf_gtf.so")
 sys.path.insert(0, 'target/debug')

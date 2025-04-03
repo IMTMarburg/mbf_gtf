@@ -22,7 +22,7 @@ use hashbrown::{HashMap, HashSet}; //hashbrown offers a very modest speedup of a
 mod categorical;
 use categorical::Categorical;
 
-struct GTFEntrys {
+pub struct GTFEntrys {
     seqname: Categorical,
     start: Vec<u64>,
     end: Vec<u64>,
@@ -83,7 +83,7 @@ fn vector_new_empty_push(count: u32, value: String) -> Vec<String> {
     res
 }
 
-fn inner_parse_ensembl_gtf(
+pub fn parse_ensembl_gtf(
     filename: &str,
     accepted_features: HashSet<String>,
 ) -> Result<RustHashMap<String, GTFEntrys>, Box<dyn error::Error>> {
@@ -228,10 +228,11 @@ fn inner_parse_ensembl_gtf(
 /// `filename - A filename (uncompressed gtf)
 /// `accepted_features` - a list of features to fetch, or an empty list for all
 #[pyfunction]
-fn parse_ensembl_gtf(filename: &str, accepted_features: Vec<String>, py: Python<'_>) -> PyResult<PyObject> {
+#[pyo3(name = "parse_ensembl_gtf")]
+fn py_parse_ensembl_gtf(filename: &str, accepted_features: Vec<String>, py: Python<'_>) -> PyResult<PyObject> {
     let hm_accepted_features: HashSet<String> =
         HashSet::from_iter(accepted_features.iter().cloned());
-    let parse_result = inner_parse_ensembl_gtf(filename, hm_accepted_features);
+    let parse_result = parse_ensembl_gtf(filename, hm_accepted_features);
     let parse_result = match parse_result {
         Ok(r) => r,
         Err(e) => return Err(PyValueError::new_err(e.to_string())),
@@ -270,7 +271,7 @@ def all_to_pandas(dict_of_frames):
 /// This module is a python module implemented in Rust.
 #[pymodule]
 fn mbf_gtf(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(parse_ensembl_gtf, m)?).unwrap();
+    m.add_function(wrap_pyfunction!(py_parse_ensembl_gtf, m)?).unwrap();
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
 
     Ok(())

@@ -2,7 +2,6 @@ use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::collections::HashMap;
 
 use pyo3::prelude::*;
-use pyo3::IntoPy;
 use pyo3::types::PyTuple;
 use numpy::ToPyArray;
 
