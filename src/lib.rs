@@ -1,8 +1,7 @@
 extern crate flate2;
-extern crate hashbrown;
 extern crate pyo3;
 
-use std::collections::HashMap as RustHashMap;
+use std::collections::{HashMap, HashSet};
 use std::error;
 use std::fs::File;
 use std::io::{BufReader, Read, BufRead};
@@ -17,19 +16,18 @@ use pyo3::ffi::c_str;
 use numpy::ToPyArray;
 
 use flate2::read::GzDecoder;
-use hashbrown::{HashMap, HashSet}; //hashbrown offers a very modest speedup of about 0.7 seconds (from 10.28 to 9.5)
 
 mod categorical;
 use categorical::Categorical;
 
 pub struct GTFEntrys {
-    seqname: Categorical,
-    start: Vec<u64>,
-    end: Vec<u64>,
-    strand: Vec<i8>,
-    cat_attributes: HashMap<String, Categorical>,
-    vec_attributes: HashMap<String, Vec<String>>,
-    count: u32,
+    pub seqname: Categorical,
+    pub start: Vec<u64>,
+    pub end: Vec<u64>,
+    pub strand: Vec<i8>,
+    pub cat_attributes: HashMap<String, Categorical>,
+    pub vec_attributes: HashMap<String, Vec<String>>,
+    pub count: u32,
 }
 
 impl GTFEntrys {
@@ -63,9 +61,9 @@ impl<'py> IntoPyObject<'py> for &GTFEntrys {
             "strand", //self.strand.into_object(py));
             self.strand.to_pyarray(py),
         ).unwrap();
-        let cat_attributes: RustHashMap<String, Categorical> =
+        let cat_attributes: HashMap<String, Categorical> =
             self.cat_attributes.iter().map(|(x,y)| (x.to_owned(), y.to_owned())).collect();
-        let vec_attributes: RustHashMap<String, Vec<String>> =
+        let vec_attributes: HashMap<String, Vec<String>> =
             self.vec_attributes.iter().map(|(x,y)| (x.to_owned(), y.to_owned())).collect();
         hm.set_item("cat_attributes", cat_attributes.into_pyobject(py).unwrap()).unwrap();
         hm.set_item("vec_attributes", vec_attributes.into_pyobject(py).unwrap()).unwrap();
@@ -86,7 +84,7 @@ fn vector_new_empty_push(count: u32, value: String) -> Vec<String> {
 pub fn parse_ensembl_gtf(
     filename: &str,
     accepted_features: HashSet<String>,
-) -> Result<RustHashMap<String, GTFEntrys>, Box<dyn error::Error>> {
+) -> Result<HashMap<String, GTFEntrys>, Box<dyn error::Error>> {
     // this is good but it still iterates through parts of the input
     // three times!
     let f = File::open(filename)?;
@@ -97,8 +95,15 @@ pub fn parse_ensembl_gtf(
     };
 
     let f = BufReader::new(f);
+    parse_ensembl_gtf_from_reader(Box::new(f), accepted_features)
+
+}
+pub fn parse_ensembl_gtf_from_reader(
+    reader: Box<dyn BufRead>,
+    accepted_features: HashSet<String>,
+) -> Result<HashMap<String, GTFEntrys>, Box<dyn error::Error>> {
     let mut out: HashMap<String, GTFEntrys> = HashMap::new();
-    for line in f.lines() {
+    for line in reader.lines() {
         let line = line?;
         if line.starts_with('#') || line.is_empty() {
             continue;
@@ -216,7 +221,7 @@ pub fn parse_ensembl_gtf(
         }
     }
 
-    let res: RustHashMap<String, GTFEntrys> = out.drain().collect();
+    let res: HashMap<String, GTFEntrys> = out.drain().collect();
     Ok(res)
 }
 
